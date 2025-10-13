@@ -50,19 +50,9 @@ class AmigoOIData(zdx.Base):
         self.d_vis = np.diag(oi_data["O_vis_cov"]) ** 0.5
         self.d_phi = np.diag(oi_data["O_phi_cov"]) ** 0.5
 
-        pix_to_latent = np.linalg.pinv(np.array(oi_data["vis_mat"], dtype=float))
-        latent_to_kernel = np.array(oi_data["K_vis_mat"], dtype=float)
-        kernel_to_ortho = np.array(oi_data["O_vis_mat"], dtype=float)
-        proj_mat = np.dot(pix_to_latent, latent_to_kernel.T)
-        proj_mat = np.dot(kernel_to_ortho, proj_mat.T)
-        self.vis_mat = proj_mat.T
-
-        pix_to_latent = np.linalg.pinv(np.array(oi_data["phi_mat"], dtype=float))
-        latent_to_kernel = np.array(oi_data["K_phi_mat"], dtype=float)
-        kernel_to_ortho = np.array(oi_data["O_phi_mat"], dtype=float)
-        proj_mat = np.dot(pix_to_latent, latent_to_kernel.T)
-        proj_mat = np.dot(kernel_to_ortho, proj_mat.T)
-        self.phi_mat = proj_mat.T
+        # Projection matrices
+        self.vis_mat = np.array(oi_data["disco_vis_mat"], dtype=float)
+        self.phi_mat = np.array(oi_data["disco_phi_mat"], dtype=float)
 
     def flatten_data(self):
         """Flatten closure phases and uncertainties."""
@@ -79,8 +69,8 @@ class AmigoOIData(zdx.Base):
         log_cvis = np.log(cvis)
         log_vis, phi = log_cvis.real, log_cvis.imag
 
-        vis = np.dot(log_vis, self.vis_mat)
-        phi = np.dot(phi, self.phi_mat)
+        vis = np.dot(self.vis_mat, log_vis)
+        phi = np.dot(self.phi_mat, phi)
         return np.concatenate([vis, phi])
 
     def model(self, model_object):
@@ -275,7 +265,7 @@ def analyse_vis(
     n_grid=10,  # number of initial grid points
     n_batch=1,  # number of batches to calculate the likelihood
     min_flux=-6,  # minimum log flux range
-    n_sigma=2.0,  # number of sigma for the upper limits
+    n_sigma=3.0,  # number of sigma for the upper limits
     max_steps=512,  # maximum number of steps for the optimizer
     tol=1e-8,  # tolerance for the optimizer
     log=False,  # whether to use log flux (needs testing)
@@ -322,6 +312,7 @@ def analyse_vis(
     perc = jsp.stats.norm.cdf(n_sigma)
     contrast_clipped = np.clip(contrast_im, 0, min_flux)  # clip to min_flux
     ruffio_im = ruffio_upperlimit(contrast_clipped, sigma_im, perc)
+    # ruffio_im = ruffio_upperlimit(contrast_im, sigma_im, perc)
 
     # Radial Ruffio upper limits
     avg_fn = lambda ruffio, **kwargs: azimuthalAverage(
@@ -426,8 +417,8 @@ def generate_photon_data(vis_eig_vals, n_terms, n_phot, cal_vis_dict, key=jr.key
     K_phi_cov = np.dot(K_phi_mat, np.dot(phase_cov, np.linalg.pinv(K_phi_mat)))
 
     # Orthonormalise the visibilities
-    o_vis, o_vis_cov, o_vis_mat, _ = orthogonalise(K_vis, K_vis_cov)
-    o_phi, o_phi_cov, o_phi_mat, _ = orthogonalise(K_phi, K_phi_cov)
+    o_vis, o_vis_cov, o_vis_mat = orthogonalise(K_vis, K_vis_cov, normalise=False)
+    o_phi, o_phi_cov, o_phi_mat = orthogonalise(K_phi, K_phi_cov, normalise=False)
 
     phot_cal_vis_dict = deepcopy(cal_vis_dict)
 

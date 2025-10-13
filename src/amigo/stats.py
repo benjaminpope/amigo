@@ -113,17 +113,6 @@ def loglike(x, mu, cov):
     return jsp.stats.multivariate_normal.logpdf(x, mean=mu, cov=cov)
 
 
-def decompose(hess, normalise=True):
-    # Get the eigenvalues and eigenvectors
-    eigvals, eigvecs = np.linalg.eig(hess)
-    eigvecs, eigvals = eigvecs.real.T, eigvals.real
-
-    # Normalise
-    if normalise:
-        eigvals /= eigvals[0]
-    return eigvals, eigvecs
-
-
 def svd(jacobian, normalise=True):
     u, s, vh = np.linalg.svd(jacobian, full_matrices=True)
     if normalise:
@@ -131,12 +120,61 @@ def svd(jacobian, normalise=True):
     return u, s, vh
 
 
+def decompose(matrix, hermitian=True, normalise=True):
+    # Get the eigenvalues and eigenvectors
+    if hermitian:
+        eigvals, eigvecs = np.linalg.eigh(matrix)
+        # eigh returns the eigenvectors in the columns, ie v_i = eigvecs[:, i]
+        # We want the rows to be the eigenvectors, ie v_i = eigvec[i], so we transpose.
+        # It also returns the eigenvalues in ascending order, so we need to reverse
+        # the order of both the eigenvalues and eigenvectors.
+        eigvals, eigvecs = eigvals[::-1], eigvecs.T[::-1]
+    else:
+        eigvals, eigvecs = np.linalg.eig(matrix)
+        eigvecs, eigvals = eigvecs.real.T, eigvals.real
+
+    # Normalise
+    if normalise:
+        eigvals /= eigvals[0]
+    return eigvals, eigvecs
+
+
 def orthogonalise(x, cov):
-    eig_vals, eig_vecs = np.linalg.eig(cov)
-    eig_vals, eig_vecs = eig_vals.real, eig_vecs.real.T
-    ortho_cov = np.dot(eig_vecs, np.dot(cov, np.linalg.inv(eig_vecs)))
-    ortho_x = np.dot(eig_vecs, x)
-    return ortho_x, ortho_cov, eig_vecs, eig_vals
+    # Eigen-decompose the covariance matrix
+    eig_vals, P = decompose(cov, normalise=False)
+
+    # Invert the order of the eigenvectors so the most informative ones are first
+    eig_vals, P = eig_vals[::-1], P[::-1]
+
+    # Project to the orthogonal basis
+    ortho_cov = P @ (cov @ P.T)
+    ortho_x = np.dot(P, x)
+    return ortho_x, ortho_cov, P, eig_vals
+
+
+def build_disco(latent_mat, kernel_mat, ortho_mat):
+    return ortho_mat @ (kernel_mat @ latent_mat)
+
+
+def calc_projection(fmat=None, cov=None, unit=True):
+    if fmat is None and cov is None:
+        raise ValueError("Must provide either fmat or cov")
+    mat = fmat if fmat is not None else cov
+
+    # Dont normalise the values since we need them
+    eig_vals, eig_vecs = decompose(mat, normalise=False)
+
+    # Eigen values of cov and fisher matrices are inverse
+    if fmat is not None:
+        scale = eig_vals**0.5
+    else:
+        scale = eig_vals**-0.5
+
+    # Project to orthogonal or ortho-normal space
+    projection = eig_vecs
+    if unit:
+        projection *= scale[:, None]
+    return projection, eig_vecs, eig_vals
 
 
 def weighted_average(values, errors):
