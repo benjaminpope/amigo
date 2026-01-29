@@ -50,7 +50,7 @@ Note that just because the tests pass on your local machine, that does not mean 
 
 **Documentation**
 
-Any changes you make should also be appropriately documented! For small API changes this shouldn't require any changes, however if you are adding new functionality you will need to add some documentation. This can be done by modifying the appropriates files in the `docs` directory.
+Any changes you make should also be appropriately documented! For small API changes this shouldn't require any changes, however if you are adding new functionality you will need to add some documentation. This can be done by modifying the appropriate files in the `docs` directory.
 
 To build the documentation locally and make sure everything is working correctly, you can run the following command:
 
